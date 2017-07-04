@@ -17,7 +17,6 @@ class serviceRpc extends eventEmitter {
   constructor(params) {
     super();
     this.setMaxListeners(1000);
-    console.log(1);
     this.rpc = null;
     this.strict = params.strict || false;
 

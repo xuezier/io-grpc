@@ -1,6 +1,6 @@
 {
   "name": "io-grpc",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "an easy rpc plan with grpc",
   "main": "index.js",
   "scripts": {
@@ -16,5 +16,13 @@
   "license": "ISC",
   "dependencies": {
     "grpc": "^1.4.1"
-  }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/xuezier/io-grpc.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xuezier/io-grpc/issues"
+  },
+  "homepage": "https://github.com/xuezier/io-grpc#readme"
 }
