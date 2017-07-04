@@ -15,8 +15,6 @@ class clientRpc extends eventEmitter {
     this._routes = {};
     this._middlewares = [];
     this.credentials = grpc.credentials.createInsecure();
-
-    this.credentials = grpc.credentials;
   }
 
   /**
