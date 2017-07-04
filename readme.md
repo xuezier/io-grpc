@@ -53,8 +53,13 @@ serviceRpc.addService('chat', function(call) {
 
 serviceRpc.decorate(route.Route);
 
+serviceRpc.addTLS({
+  ca: __dirname + '/ca.crt',
+  cert: __dirname + '/server.crt',
+  key: __dirname + '/server.key'
+});
 
-serviceRpc.bind('0.0.0.0:50052', serviceRpc.ServerCredentials.createInsecure());
+serviceRpc.bind('0.0.0.0:50052');
 ```
 
 ## build client
@@ -63,10 +68,14 @@ var createClient = require('./io-grpc').createClientRpc;
 var clientRpc = createClient();
 
 let route = clientRpc.load(__dirname + '/grpc.service.proto').route;
-clientRpc.decorate(route.Route, 'localhost:50052', clientRpc.credentials.createInsecure());
+clientRpc.addAuth({
+  ca: __dirname + '/ca.crt',
+  cert: __dirname + '/client.crt',
+  key: __dirname + '/client.key'
+});
+clientRpc.decorate(route.Route, 'localhost:50052');
 
 clientRpc.route('chat', { content: 'i am gaubee' }, function(call) {
   console.log(call.body);
 });
-
 ```

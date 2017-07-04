@@ -4,9 +4,9 @@ const handle = require('../utils/handle');
 
 const grpc = require('grpc');
 const eventEmitter = require('events');
+const fs = require('fs');
 
 var _serviceRpc;
-
 class serviceRpc extends eventEmitter {
   /**
    * Creates an instance of serviceRpc.
@@ -22,6 +22,7 @@ class serviceRpc extends eventEmitter {
 
     this._service = {};
     this._middlewares = [];
+    this.credentials = grpc.ServerCredentials.createInsecure();
 
     this.ServerCredentials = grpc.ServerCredentials;
   }
@@ -41,10 +42,26 @@ class serviceRpc extends eventEmitter {
     this.rpc = rpc;
   }
 
+  /**
+   * add tls auth
+   *
+   * @param {Object} params
+   * @param {String} params.ca  the path of ca file
+   * @param {String} params.cert the path of cert file
+   * @param {String} params.key the path of key file
+   * @memberof serviceRpc
+   */
+  addTLS(params) {
+    this.credentials = grpc.ServerCredentials.createSsl(fs.readFileSync(params.ca), [{
+      cert_chain: fs.readFileSync(params.cert),
+      private_key: fs.readFileSync(params.key)
+    }], true);
+  }
+
   bind() {
     var server = new grpc.Server();
     server.addService(this.rpc.service, this._service);
-    server.bind.apply(server, arguments);
+    server.bind.apply(server, [arguments[0], this.credentials]);
     server.start();
     console.log('grpc server start at:', arguments[0]);
   }

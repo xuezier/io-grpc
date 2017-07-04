@@ -1,8 +1,10 @@
 'use strict';
 const _ = require('../utils/utils');
 const handle = require('../utils/handle');
+
 const grpc = require('grpc');
 const eventEmitter = require('events');
+const fs = require('fs');
 
 class clientRpc extends eventEmitter {
   constructor() {
@@ -12,6 +14,7 @@ class clientRpc extends eventEmitter {
     this.client = null;
     this._routes = {};
     this._middlewares = [];
+    this.credentials = grpc.credentials.createInsecure();
 
     this.credentials = grpc.credentials;
   }
@@ -26,10 +29,27 @@ class clientRpc extends eventEmitter {
     return grpc.load.apply(grpc, arguments);
   }
 
+  /**
+   * add tls auth to connect service
+   *
+   * @param {Object} params
+   * @param {String} params.ca    the path of ca file
+   * @param {String} params.cert  the path of cert file
+   * @param {String} params.key   the path of key file
+   * @memberof clientRpc
+   */
+  addAuth(params) {
+    this.credentials = grpc.credentials.createSsl(
+      fs.readFileSync(params.ca),
+      fs.readFileSync(params.key),
+      fs.readFileSync(params.cert)
+    );
+  }
+
   decorate(rpc) {
     this.rpc = rpc;
 
-    this.client = new rpc(...Array.prototype.slice.call(arguments, 1));
+    this.client = new rpc(arguments[1], this.credentials);
   }
 
   /**
