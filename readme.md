@@ -1,18 +1,31 @@
 # IO-GRPC
+[![NPM version][npm-image]][npm-url]
 
 an sample rpc-framework build with grpc for node.js. easy used, fast & high-performance.
 
 ## Service side
-use for create service side.
-### *load*
+for create service side.
+### *load(protoFile)*
 load proto file to generate service description
 
-### *decorate*
+### *decorate(rpc)*
+### *addTLS(serviceCertificates)*
+### *bind(port)*
+### *use(middlewareFn)*
+### *addService(name,middlewares,callback(stream))*
 
+
+## Client side
+for create client side
+### *load(protoFile)*
+### *addAuth(clientCertificates)*
+### *decorate(rpc)*
+### *use(middlewareFn)*
+### *route(name, data, callback)*
 
 ## build proto
 ```java
-syntax = "proto3";
+ssyntax = "proto3";
 
 option java_multiple_files = true;
 option java_package= "io.grpc.myserver.route";
@@ -30,6 +43,10 @@ message Message {
 
 message routeMessage {
   string content = 1;
+}
+
+service Test {
+  rpc Chat(stream Message) returns (stream routeMessage) {}
 }
 ```
 
@@ -84,3 +101,7 @@ clientRpc.route('chat', { content: 'i am gaubee' }, function(call) {
   console.log(call.body);
 });
 ```
+
+
+[npm-image]: https://img.shields.io/npm/v/io-grpc.svg?style=flat-square
+[npm-url]: https://www.npmjs.com/package/io-grpc
