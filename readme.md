@@ -46,12 +46,17 @@ serviceRpc.use(function(call, next) {
   console.log('end middleware');
 });
 
-serviceRpc.addService('chat', function(call) {
+serviceRpc.addService('route/chat', function(call) {
   console.log(call.body);
   call.write('i am xuezi');
 });
 
-serviceRpc.decorate(route.Route);
+serviceRpc.addService('test/chat', function(call) {
+  console.log(call.body);
+  call.write('i am xuezi');
+});
+
+serviceRpc.decorate(route);
 
 serviceRpc.addTLS({
   ca: __dirname + '/ca.crt',
