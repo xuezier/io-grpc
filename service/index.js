@@ -17,9 +17,9 @@ class serviceRpc extends eventEmitter {
   constructor(params) {
     super();
     this.setMaxListeners(1000);
-    this.rpc = null;
     this.strict = params.strict || false;
 
+    this._rpc = {};
     this._service = {};
     this._middlewares = [];
     this.credentials = grpc.ServerCredentials.createInsecure();
@@ -39,7 +39,10 @@ class serviceRpc extends eventEmitter {
   }
 
   decorate(rpc) {
-    this.rpc = rpc;
+    for (let key in rpc) {
+      let rpc_name = key.toLowerCase();
+      if (rpc[key].hasOwnProperty('service')) this._rpc[rpc_name] = rpc[key];
+    }
   }
 
   /**
@@ -60,7 +63,9 @@ class serviceRpc extends eventEmitter {
 
   bind() {
     var server = new grpc.Server();
-    server.addService(this.rpc.service, this._service);
+    for (let rpc in this._rpc) {
+      server.addService(this._rpc[rpc].service, this._service[rpc] || {});
+    }
     server.bind.apply(server, [arguments[0], this.credentials]);
     server.start();
     console.log('grpc server start at:', arguments[0]);
@@ -85,13 +90,20 @@ class serviceRpc extends eventEmitter {
   addService(name, middlewares, callback) {
     let self = this;
 
-    if (self._service.hasOwnProperty(name)) {
+    let rpc = name.split('/').shift();
+    let service_name = name.slice(rpc.length + 1);
+
+    if (!service_name) throw new Error(`service name ${name} is not allowed`);
+
+    if (!self._service[rpc]) self._service[rpc] = {};
+
+    if (self._service[rpc].hasOwnProperty(service_name)) {
       throw new Error(`service name ${name} has used`);
     }
 
     let addArgs = arguments;
 
-    self._service[name] = function(call) {
+    self._service[rpc][service_name] = function(call) {
       let incoming;
 
       let _routeMiddlewares;
@@ -123,7 +135,6 @@ class serviceRpc extends eventEmitter {
         call.end();
       });
     };
-
   }
 }
 
