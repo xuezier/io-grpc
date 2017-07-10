@@ -8,21 +8,19 @@
  * @return {Promise}
  */
 function handle(call, stacks) {
-  return new Promise(function(resolve, reject) {
-    var index = 0;
+  var index = 0;
 
-    function next() {
-      var handler = stacks[index++];
-      if (!handler)
-        return resolve(true);
-      try {
-        handler(call, next);
-      } catch (e) {
-        return reject(e);
-      }
+  var next = function() {
+    var handler = stacks[index++];
+    if (!handler) return false;
+    try {
+      handler(call, next);
+    } catch (e) {
+      return e;
     }
-    next();
-  });
+  };
+
+  return next();
 }
 
 module.exports = handle;

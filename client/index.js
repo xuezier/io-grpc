@@ -13,6 +13,7 @@ class clientRpc extends eventEmitter {
     this.rpc = null;
     this.client = null;
     this._routes = {};
+    this._service = {};
     this._middlewares = [];
     this.credentials = grpc.credentials.createInsecure();
   }
@@ -47,7 +48,9 @@ class clientRpc extends eventEmitter {
   decorate(rpc) {
     this.rpc = rpc;
 
-    this.client = new rpc(arguments[1], this.credentials);
+    var client = new rpc(arguments[1], this.credentials);
+    console.log(client);
+    this.client = client;
   }
 
   /**
@@ -71,21 +74,39 @@ class clientRpc extends eventEmitter {
 
     call.on('data', function(chunk) {
       call.body = chunk;
-      handle(call, self._middlewares).then(function(flag) {
-        if (flag) callback(call);
-        else throw new Error(`run route method error ${name}`);
-      }).catch(function(e) {
-        console.error(e);
-      });
+
+      let err = handle(call, self._middlewares);
+      if (err) return console.error(err);
+      callback(call);
+      call.end();
     });
 
     call.on('end', function() {
       call.end();
     });
-
     call.write(data);
-    call.end();
   }
+
+  addService(name, callback) {
+    let self = this;
+    if (this._service.hasOwnProperty(name)) throw new Error(`service ${name} has been declared`);
+
+    var call = self.client[name]();
+    this._service[name] = call;
+    call.write({});
+    call.on('data', function(chunk) {
+      call.body = chunk;
+      let _middlewares = [].concat(self._middlewares);
+      let err = handle(call, _middlewares);
+      if (err) return console.log(err);
+      callback(call);
+    });
+
+    call.on('end', function() {
+      console.log(`call ${name} end`);
+    });
+  }
+
 }
 
 module.exports = function createClientRpc() {

@@ -1,6 +1,7 @@
 'use strice';
 const _ = require('../utils/utils');
 const handle = require('../utils/handle');
+const createProxyProperty = require('../utils/proxy');
 
 const grpc = require('grpc');
 const eventEmitter = require('events');
@@ -20,7 +21,8 @@ class serviceRpc extends eventEmitter {
     this.strict = params.strict || false;
 
     this._rpc = {};
-    this._service = {};
+    this._service = createProxyProperty();
+    this._routes = createProxyProperty();
     this._middlewares = [];
     this.credentials = grpc.ServerCredentials.createInsecure();
 
@@ -64,11 +66,11 @@ class serviceRpc extends eventEmitter {
   bind() {
     var server = new grpc.Server();
     for (let rpc in this._rpc) {
-      server.addService(this._rpc[rpc].service, this._service[rpc] || {});
+      server.addService(this._rpc[rpc].service, this._service[rpc] ? this._service[rpc].all() : {});
     }
     server.bind.apply(server, [arguments[0], this.credentials]);
     server.start();
-    console.log('grpc server start at:', arguments[0]);
+    return server;
   }
 
   /**
@@ -81,6 +83,93 @@ class serviceRpc extends eventEmitter {
     }
   }
 
+  _addService(name, middlewares, callback) {
+    let self = this;
+
+    let rpc = name.split('/').shift();
+    let service_name = name.slice(rpc.length + 1);
+
+    if (!service_name) throw new Error(`service name ${name} is not allowed`);
+
+    if (!self._service[rpc]) self._service.setItem(rpc, createProxyProperty());
+
+    if (self._service[rpc].hasOwnProperty(service_name)) {
+      throw new Error(`service name ${name} has used`);
+    }
+
+    return { rpc, service_name };
+  }
+
+  _createService(middlewares, callback) {
+    let self = this;
+    let addArgs = arguments;
+
+    let _routeMiddlewares;
+    let _middlewares = [].concat(self._middlewares);
+    if (_.typeof(middlewares) === 'array')
+      _routeMiddlewares = _middlewares.concat(middlewares);
+    else if (_.typeof(middlewares) === 'function' && callback) {
+      let length = addArgs.length;
+      _routeMiddlewares = _middlewares.concat(Array.prototype.slice.call(addArgs, 1, length - 1));
+    } else if (!callback) {
+      _routeMiddlewares = _middlewares;
+      callback = middlewares;
+    }
+
+    _routeMiddlewares.push(callback);
+
+    return _routeMiddlewares;
+  }
+
+  addRoute(name, middlewares, callback) {
+    let self = this;
+    let { rpc, service_name } = self._addService.apply(self, arguments);
+    console.log(rpc, service_name);
+    let addArgs = arguments;
+
+    self._service[rpc].setItem(service_name, function(call) {
+      const _routeMiddlewares = self._createService.apply(self, Array.prototype.slice.call(addArgs, 1));
+
+      let _eventId = 1,
+        _dataId = 0;
+      call._routeEmitter = new eventEmitter();
+      call._routeEmitter.setMaxListeners(1000);
+
+      let incoming;
+      call.on('data', function(chunk) {
+        incoming = chunk;
+        call.body = incoming;
+        console.log(_dataId,chunk,'d');
+        let err = handle(call, _routeMiddlewares);
+        if (err) return console.error(err);
+
+        call._routeEmitter.emit(_dataId++, call);
+      });
+
+      call._writeRoute = function(data, cb) {
+        console.log(_eventId,'e');
+        call._routeEmitter.once(_eventId++, cb);
+        call.write(data);
+      };
+
+      if (!self._routes[rpc]) {
+        self._routes.setItem(rpc, createProxyProperty());
+      }
+      self._routes[rpc].setItem(service_name, call, true);
+    });
+  }
+
+  route(name, data, callback) {
+    let self = this;
+    if (_.typeof(data) === 'function') {
+      callback = data;
+    }
+    let rpc = name.split('/').shift();
+    let service_name = name.slice(rpc.length + 1);
+
+    self._routes[rpc][service_name]._writeRoute(data, callback);
+  }
+
   /**
    * add route method
    * @param {String} name route name
@@ -89,52 +178,24 @@ class serviceRpc extends eventEmitter {
    */
   addService(name, middlewares, callback) {
     let self = this;
-
-    let rpc = name.split('/').shift();
-    let service_name = name.slice(rpc.length + 1);
-
-    if (!service_name) throw new Error(`service name ${name} is not allowed`);
-
-    if (!self._service[rpc]) self._service[rpc] = {};
-
-    if (self._service[rpc].hasOwnProperty(service_name)) {
-      throw new Error(`service name ${name} has used`);
-    }
-
+    let { rpc, service_name } = self._addService.apply(self, arguments);
     let addArgs = arguments;
 
-    self._service[rpc][service_name] = function(call) {
+    self._service[rpc].setItem(service_name, function(call) {
+      let _routeMiddlewares = self._createService.apply(self, Array.prototype.slice.call(addArgs, 1));
       let incoming;
-
-      let _routeMiddlewares;
-
-      if (_.typeof(middlewares) === 'array')
-        _routeMiddlewares = self._middlewares.concat(middlewares);
-      else if (_.typeof(middlewares) === 'function' && callback) {
-        let length = addArgs.length;
-        _routeMiddlewares = self._middlewares.concat(Array.prototype.slice.call(addArgs, 1, length - 1));
-      } else if (!callback) {
-        _routeMiddlewares = self._middlewares;
-        callback = middlewares;
-      }
-
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
 
-
-        handle(call, _routeMiddlewares).then(function(flag) {
-          if (flag) callback(call);
-          else throw new Error('run handle middleware error, please check code');
-        }).catch(function(e) {
-          console.error(e);
-        });
+        let err = handle(call, _routeMiddlewares);
+        if (err) return console.error(err);
       });
 
       call.on('end', function() {
         call.end();
       });
-    };
+    });
   }
 }
 

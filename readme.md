@@ -24,8 +24,8 @@ for create client side
 ### *route(name, data, callback)*
 
 ## build proto
-```java
-ssyntax = "proto3";
+```protobuf
+syntax = "proto3";
 
 option java_multiple_files = true;
 option java_package= "io.grpc.myserver.route";
@@ -57,20 +57,28 @@ var createRpc = require('./io-grpc').createServiceRpc;
 let serviceRpc = createRpc();
 var route = serviceRpc.load(__dirname + '/grpc.service.proto').route;
 
-serviceRpc.use(function(call, next) {
-  console.log('middleware call :', call.body);
-  next();
-  console.log('end middleware');
-});
 
 serviceRpc.addService('route/chat', function(call) {
   console.log(call.body);
   call.write('i am xuezi');
 });
 
+
+serviceRpc.addService('test/getChat', function(call) {
+  console.log(call.body, 1);
+  serviceRpc.route(call.body.route, { content: 'im xuezi trans' }, function(recall) {
+    let body = recall.body;
+    console.log(body, 2);
+    call.write(body);
+  });
+});
+
 serviceRpc.addService('test/chat', function(call) {
   console.log(call.body);
-  call.write('i am xuezi');
+  call.write('i am xuezi11');
+});
+serviceRpc.addRoute('route/trans', function(call) {
+  console.log(call.body, 'trans');
 });
 
 serviceRpc.decorate(route);
@@ -81,10 +89,37 @@ serviceRpc.addTLS({
   key: __dirname + '/server.key'
 });
 
-serviceRpc.bind('0.0.0.0:50052');
+var server = serviceRpc.bind('0.0.0.0:5052');
+console.log('rpc server start at:', '0.0.0.0:5052');
 ```
 
 ## build client
+```javascript
+var createClient = require('./io-grpc').createClientRpc;
+var clientRpc = createClient();
+var express = require('express');
+var app = express();
+let route = clientRpc.load(__dirname + '/grpc.service.proto').route;
+clientRpc.addAuth({
+  ca: __dirname + '/ca.crt',
+  cert: __dirname + '/client.crt',
+  key: __dirname + '/client.key'
+});
+clientRpc.decorate(route.Route, 'localhost:5052');
+
+clientRpc.route('chat', { content: 'i am gaubee' }, function(call) {
+  console.log(call.body);
+});
+
+clientRpc.addService('trans', function(call) {
+  console.log(call.body, 'from rote');
+  call.write({ content: 'i am gaubee' });
+});
+
+app.listen(2222);
+```
+
+## route client
 ```javascript
 var createClient = require('./io-grpc').createClientRpc;
 var clientRpc = createClient();
@@ -95,9 +130,13 @@ clientRpc.addAuth({
   cert: __dirname + '/client.crt',
   key: __dirname + '/client.key'
 });
-clientRpc.decorate(route.Route, 'localhost:50052');
+clientRpc.decorate(route.Test, 'localhost:5052');
 
-clientRpc.route('chat', { content: 'i am gaubee' }, function(call) {
+clientRpc.route('chat', { content: 'i am chaos' }, function(call) {
+  console.log(call.body);
+});
+
+clientRpc.route('getChat', { route: 'route/trans' }, function(call) {
   console.log(call.body);
 });
 ```
