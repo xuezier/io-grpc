@@ -35,18 +35,31 @@ package route;
 
 service Route {
   rpc Chat(stream Message) returns (stream routeMessage) {}
+  rpc GetChat(stream Message) returns (stream routeMessage) {}
+  rpc Trans (stream Message) returns (stream routeMessage) {}
+}
+
+message TransMessage {
+  string name = 1;
+  int32 age = 2;
+  bytes birthday = 3;
 }
 
 message Message {
   string content = 1;
 }
 
-message routeMessage {
-  string content = 1;
-}
-
 service Test {
   rpc Chat(stream Message) returns (stream routeMessage) {}
+  rpc GetChat(stream GetMessage) returns (stream routeMessage) {}
+}
+
+message GetMessage {
+  string route = 1;
+}
+
+message routeMessage {
+  string content = 1;
 }
 ```
 
