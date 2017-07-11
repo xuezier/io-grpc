@@ -16,6 +16,9 @@ class clientRpc extends eventEmitter {
     this._service = {};
     this._middlewares = [];
     this.credentials = grpc.credentials.createInsecure();
+    this._errorFn = [];
+    this._reconnect_count = 10;
+    this._reconnect_delay = 5000;
   }
 
   /**
@@ -87,13 +90,19 @@ class clientRpc extends eventEmitter {
     call.write(data);
   }
 
-  addService(name, callback) {
+  _addService(name, reconnect) {
     let self = this;
-    if (this._service.hasOwnProperty(name)) throw new Error(`service ${name} has been declared`);
+    if (this._service.hasOwnProperty(name) && !reconnect) throw new Error(`service ${name} has been declared`);
 
     var call = self.client[name]();
     this._service[name] = call;
     call.write({});
+    return call;
+  }
+
+  _addServiceCall(call, callback) {
+    let self = this;
+
     call.on('data', function(chunk) {
       call.body = chunk;
       let _middlewares = [].concat(self._middlewares);
@@ -105,6 +114,46 @@ class clientRpc extends eventEmitter {
     call.on('end', function() {
       console.log(`call ${name} end`);
     });
+  }
+
+  _handleCallError(name, call, callback) {
+    let self = this;
+
+    let _reconnect_count = 0;
+    let _reconnect = true;
+    call.on('error', function(e) {
+      if (call.finished) {
+        let _ti = setInterval(function() {
+          if (_reconnect_count < self._reconnect_count) {
+            try {
+              console.log(e);
+              let recall = self._addService(name, _reconnect);
+              if (recall) {
+                self._handleCallError(name, recall, callback);
+                self._addServiceCall(recall, callback);
+                clearInterval(_ti);
+              }
+            } catch (err) {
+              console.log(err);
+              _reconnect_count++;
+            }
+          } else {
+            clearInterval(_ti);
+            console.error(`connect ${name} failed`);
+          }
+        }, self._reconnect_delay);
+      }
+    });
+  }
+
+  addService(name, callback) {
+    let self = this;
+
+    let call = self._addService(name);
+
+    self._addServiceCall(call, callback);
+
+    self._handleCallError(name, call, callback);
   }
 
 }

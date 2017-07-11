@@ -139,7 +139,7 @@ class serviceRpc extends eventEmitter {
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
-        console.log(_dataId,chunk,'d');
+        console.log(_dataId, chunk, 'd');
         let err = handle(call, _routeMiddlewares);
         if (err) return console.error(err);
 
@@ -147,7 +147,7 @@ class serviceRpc extends eventEmitter {
       });
 
       call._writeRoute = function(data, cb) {
-        console.log(_eventId,'e');
+        console.log(_eventId, 'e');
         call._routeEmitter.once(_eventId++, cb);
         call.write(data);
       };
@@ -168,6 +168,12 @@ class serviceRpc extends eventEmitter {
     let service_name = name.slice(rpc.length + 1);
 
     self._routes[rpc][service_name]._writeRoute(data, callback);
+  }
+
+  _handleError(error) {
+    if (_.typeof(error) === 'string')
+      console.error(new Error(error));
+    console.error(error);
   }
 
   /**
@@ -194,6 +200,10 @@ class serviceRpc extends eventEmitter {
 
       call.on('end', function() {
         call.end();
+      });
+
+      call.on('error', function(e) {
+        console.error(e);
       });
     });
   }
