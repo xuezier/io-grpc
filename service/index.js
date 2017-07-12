@@ -23,9 +23,10 @@ class serviceRpc extends eventEmitter {
     this._rpc = {};
     this._service = createProxyProperty();
     this._routes = createProxyProperty();
+    this._serviceMiddlewares = {};
     this._middlewares = [];
-    this.credentials = grpc.ServerCredentials.createInsecure();
-
+    this._errorMiddlewares = [];
+    this._credentials = grpc.ServerCredentials.createInsecure();
     this.ServerCredentials = grpc.ServerCredentials;
   }
 
@@ -57,7 +58,7 @@ class serviceRpc extends eventEmitter {
    * @memberof serviceRpc
    */
   addTLS(params) {
-    this.credentials = grpc.ServerCredentials.createSsl(fs.readFileSync(params.ca), [{
+    this._credentials = grpc.ServerCredentials.createSsl(fs.readFileSync(params.ca), [{
       cert_chain: fs.readFileSync(params.cert),
       private_key: fs.readFileSync(params.key)
     }], true);
@@ -68,7 +69,7 @@ class serviceRpc extends eventEmitter {
     for (let rpc in this._rpc) {
       server.addService(this._rpc[rpc].service, this._service[rpc] ? this._service[rpc].all() : {});
     }
-    server.bind.apply(server, [arguments[0], this.credentials]);
+    server.bind.apply(server, [arguments[0], this._credentials]);
     server.start();
     return server;
   }
@@ -79,11 +80,18 @@ class serviceRpc extends eventEmitter {
    */
   use(fn) {
     if (_.typeof(fn) === 'function') {
-      this._middlewares.push(fn);
+      let _argumentsLength = fn.length;
+      if (_argumentsLength === 2) {
+        this._middlewares.push(fn);
+      } else if (_argumentsLength === 1 || _argumentsLength === 3) {
+        this._errorMiddlewares.push(fn);
+      } else {
+        console.warn('middleware function max arguments length is 3');
+      }
     }
   }
 
-  _addService(name, middlewares, callback) {
+  _addService(name) {
     let self = this;
 
     let rpc = name.split('/').shift();
@@ -139,9 +147,10 @@ class serviceRpc extends eventEmitter {
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
-        console.log(_dataId, chunk, 'd');
-        let err = handle(call, _routeMiddlewares);
-        if (err) return console.error(err);
+
+        call.stacks = _routeMiddlewares;
+        call.errorStacks = self._errorMiddlewares;
+        handle(call);
 
         call._routeEmitter.emit(_dataId++, call);
       });
@@ -193,9 +202,9 @@ class serviceRpc extends eventEmitter {
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
-
-        let err = handle(call, _routeMiddlewares);
-        if (err) return console.error(err);
+        call.stacks = _routeMiddlewares;
+        call.errorStacks = self._errorMiddlewares;
+        handle(call);
       });
 
       call.on('end', function() {
