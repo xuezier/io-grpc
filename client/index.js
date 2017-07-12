@@ -77,10 +77,10 @@ class clientRpc extends eventEmitter {
 
     call.on('data', function(chunk) {
       call.body = chunk;
-
-      let err = handle(call, self._middlewares);
-      if (err) return console.error(err);
-      callback(call);
+      let _middlewares = [].concat(self._middlewares);
+      _middlewares.push(callback);
+      call._middlewares = _middlewares;
+      handle(call);
       call.end();
     });
 
@@ -106,9 +106,9 @@ class clientRpc extends eventEmitter {
     call.on('data', function(chunk) {
       call.body = chunk;
       let _middlewares = [].concat(self._middlewares);
-      let err = handle(call, _middlewares);
-      if (err) return console.log(err);
-      callback(call);
+      _middlewares.push(callback);
+      call._middlewares = _middlewares;
+      handle(call);
     });
 
     call.on('end', function() {

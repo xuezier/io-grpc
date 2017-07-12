@@ -23,9 +23,13 @@ class serviceRpc extends eventEmitter {
     this._rpc = {};
     this._service = createProxyProperty();
     this._routes = createProxyProperty();
+
     this._serviceMiddlewares = {};
+    this._serviceErrorMiddlewares = {};
+
     this._middlewares = [];
     this._errorMiddlewares = [];
+
     this._credentials = grpc.ServerCredentials.createInsecure();
     this.ServerCredentials = grpc.ServerCredentials;
   }
@@ -79,14 +83,45 @@ class serviceRpc extends eventEmitter {
    * @param {Function} fn middleware method withe params stream for call & next middleware for next
    */
   use(fn) {
-    if (_.typeof(fn) === 'function') {
-      let _argumentsLength = fn.length;
-      if (_argumentsLength === 2) {
-        this._middlewares.push(fn);
-      } else if (_argumentsLength === 1 || _argumentsLength === 3) {
-        this._errorMiddlewares.push(fn);
+    let argLength = arguments.length;
+    if (argLength === 1) {
+      if (_.typeof(fn) === 'function') {
+        let _argumentsLength = fn.length;
+        if (_argumentsLength === 2) {
+          this._middlewares.push(fn);
+        } else if (_argumentsLength === 1 || _argumentsLength === 3) {
+          this._errorMiddlewares.push(fn);
+        } else {
+          console.warn('middleware function max arguments length is 3');
+        }
       } else {
-        console.warn('middleware function max arguments length is 3');
+        throw new Error('middleware must be an function');
+      }
+    } else {
+      let name = arguments[0];
+      fn = arguments[1];
+      let rpc = name.split('/').shift();
+      let service_name = name.slice(rpc.length + 1);
+
+      if (!service_name) throw new Error(`service name must a string like rpc_name/service_name, but got ${name}`);
+
+      if (_.typeof(fn) === 'function') {
+        let _argumentsLength = fn.length;
+        if (_argumentsLength === 2) {
+          if (!this._serviceMiddlewares[rpc]) this._serviceMiddlewares[rpc] = {};
+          if (!this._serviceMiddlewares[rpc][service_name]) this._serviceMiddlewares[rpc][service_name] = [];
+
+          this._serviceMiddlewares[rpc][service_name].push(fn);
+        } else if (_argumentsLength === 1 || _argumentsLength === 3) {
+          if (!this._serviceErrorMiddlewares[rpc]) this._serviceErrorMiddlewares[rpc] = {};
+          if (!this._serviceErrorMiddlewares[rpc][service_name]) this._serviceErrorMiddlewares[rpc][service_name] = [];
+
+          this._serviceErrorMiddlewares[rpc][service_name].push(fn);
+        } else {
+          console.warn('middleware function max arguments length is 3');
+        }
+      } else {
+        throw new Error('middleware must be an function');
       }
     }
   }
@@ -108,21 +143,28 @@ class serviceRpc extends eventEmitter {
     return { rpc, service_name };
   }
 
-  _createService(middlewares, callback) {
+  _createService({ rpc, service_name }, middlewares, callback) {
     let self = this;
     let addArgs = arguments;
 
     let _routeMiddlewares;
     let _middlewares = [].concat(self._middlewares);
+
+    let _serviceMiddlewares;
+    if (self._serviceMiddlewares[rpc]) {
+      _serviceMiddlewares = self._serviceMiddlewares[rpc][service_name];
+    }
     if (_.typeof(middlewares) === 'array')
       _routeMiddlewares = _middlewares.concat(middlewares);
     else if (_.typeof(middlewares) === 'function' && callback) {
       let length = addArgs.length;
-      _routeMiddlewares = _middlewares.concat(Array.prototype.slice.call(addArgs, 1, length - 1));
+      _routeMiddlewares = _middlewares.concat(Array.prototype.slice.call(addArgs, 2, length - 1));
     } else if (!callback) {
       _routeMiddlewares = _middlewares;
       callback = middlewares;
     }
+
+    if (_serviceMiddlewares) _routeMiddlewares = _routeMiddlewares.concat(_serviceMiddlewares);
 
     _routeMiddlewares.push(callback);
 
@@ -136,7 +178,7 @@ class serviceRpc extends eventEmitter {
     let addArgs = arguments;
 
     self._service[rpc].setItem(service_name, function(call) {
-      const _routeMiddlewares = self._createService.apply(self, Array.prototype.slice.call(addArgs, 1));
+      const _routeMiddlewares = self._createService.apply(self, [{ rpc, service_name }].concat(Array.prototype.slice.call(addArgs, 1)));
 
       let _eventId = 1,
         _dataId = 0;
@@ -148,7 +190,7 @@ class serviceRpc extends eventEmitter {
         incoming = chunk;
         call.body = incoming;
 
-        call.stacks = _routeMiddlewares;
+        call._middlewares = _routeMiddlewares;
         call.errorStacks = self._errorMiddlewares;
         handle(call);
 
@@ -197,12 +239,12 @@ class serviceRpc extends eventEmitter {
     let addArgs = arguments;
 
     self._service[rpc].setItem(service_name, function(call) {
-      let _routeMiddlewares = self._createService.apply(self, Array.prototype.slice.call(addArgs, 1));
+      let _routeMiddlewares = self._createService.apply(self, [{ rpc, service_name }].concat(Array.prototype.slice.call(addArgs, 1)));
       let incoming;
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
-        call.stacks = _routeMiddlewares;
+        call._middlewares = _routeMiddlewares;
         call.errorStacks = self._errorMiddlewares;
         handle(call);
       });

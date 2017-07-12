@@ -13,7 +13,7 @@ function handle(call) {
   var index = 0;
 
   var next = function() {
-    var handler = call.stacks[index++];
+    var handler = call._middlewares[index++];
     if (!handler) return false;
     process.nextTick(function() {
       try {
