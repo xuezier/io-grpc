@@ -143,7 +143,7 @@ class serviceRpc extends eventEmitter {
     return { rpc, service_name };
   }
 
-  _createService({ rpc, service_name }, middlewares, callback) {
+  _createService({ rpc, service_name, call }, middlewares, callback) {
     let self = this;
     let addArgs = arguments;
 
@@ -168,7 +168,19 @@ class serviceRpc extends eventEmitter {
 
     _routeMiddlewares.push(callback);
 
-    return _routeMiddlewares;
+    call._middlewares = _routeMiddlewares;
+  }
+
+  _addServiceErrorHandler({ rpc, service_name }, call) {
+    let _errorStacks = [].concat(this._errorMiddlewares);
+
+    let _serviceErrorStacks;
+    if (this._serviceErrorMiddlewares[rpc]) {
+      _serviceErrorStacks = this._serviceErrorMiddlewares[rpc][service_name];
+    }
+
+    if (_serviceErrorStacks) _errorStacks = _errorStacks.concat(_serviceErrorStacks);
+    call._errorStacks = _errorStacks;
   }
 
   addRoute(name, middlewares, callback) {
@@ -178,7 +190,7 @@ class serviceRpc extends eventEmitter {
     let addArgs = arguments;
 
     self._service[rpc].setItem(service_name, function(call) {
-      const _routeMiddlewares = self._createService.apply(self, [{ rpc, service_name }].concat(Array.prototype.slice.call(addArgs, 1)));
+      self._createService.apply(self, [{ rpc, service_name, call }].concat(Array.prototype.slice.call(addArgs, 1)));
 
       let _eventId = 1,
         _dataId = 0;
@@ -190,8 +202,7 @@ class serviceRpc extends eventEmitter {
         incoming = chunk;
         call.body = incoming;
 
-        call._middlewares = _routeMiddlewares;
-        call.errorStacks = self._errorMiddlewares;
+        self._addServiceErrorHandler({ rpc, service_name }, call);
         handle(call);
 
         call._routeEmitter.emit(_dataId++, call);
@@ -239,13 +250,12 @@ class serviceRpc extends eventEmitter {
     let addArgs = arguments;
 
     self._service[rpc].setItem(service_name, function(call) {
-      let _routeMiddlewares = self._createService.apply(self, [{ rpc, service_name }].concat(Array.prototype.slice.call(addArgs, 1)));
+      self._createService.apply(self, [{ rpc, service_name, call }].concat(Array.prototype.slice.call(addArgs, 1)));
       let incoming;
       call.on('data', function(chunk) {
         incoming = chunk;
         call.body = incoming;
-        call._middlewares = _routeMiddlewares;
-        call.errorStacks = self._errorMiddlewares;
+        self._addServiceErrorHandler({ rpc, service_name }, call);
         handle(call);
       });
 

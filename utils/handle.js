@@ -2,6 +2,8 @@
 const process = require('process');
 const events = new require('events');
 const eventEmitter = new events();
+
+const _ = require('./utils');
 /**
  * run middlewares stacks
  * @author xuezi
@@ -12,7 +14,12 @@ const eventEmitter = new events();
 function handle(call) {
   var index = 0;
 
-  var next = function() {
+  var next = function(err) {
+    if (err) {
+      if (_.typeof(err) === 'string' || _.typeof(err) === 'number') err = new Error(err);
+      return eventEmitter.emit('handleError', err, call);
+    }
+
     var handler = call._middlewares[index++];
     if (!handler) return false;
     process.nextTick(function() {
@@ -42,7 +49,7 @@ function _handleError(error, call) {
    * @param {Error} err
    */
   var next = function(err) {
-    var handler = call.errorStacks[index++];
+    var handler = call._errorStacks[index++];
     if (!handler) return false;
     process.nextTick(function() {
       try {
